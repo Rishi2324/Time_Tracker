@@ -1,12 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 
-const TARGETS = {
-  work: 9 * 60 * 60,
-  learning: 5 * 60 * 60,
-  personal: 3 * 60 * 60,
-  sleep: 7 * 60 * 60,
-};
-
 function formatTime(seconds) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -27,37 +20,96 @@ export default function App() {
   });
 
   const [active, setActive] = useState(null);
+  const [startTime, setStartTime] = useState(null);
   const intervalRef = useRef(null);
 
-  // Load from localStorage
+  // ✅ LOAD DATA
   useEffect(() => {
-    const saved = localStorage.getItem("timeData");
-    if (saved) {
-      setTimes(JSON.parse(saved));
-    }
+    const savedTimes = localStorage.getItem("timeData");
+    const savedActive = localStorage.getItem("activeTask");
+    const savedStart = localStorage.getItem("startTime");
+
+    if (savedTimes) setTimes(JSON.parse(savedTimes));
+    if (savedActive) setActive(savedActive);
+    if (savedStart) setStartTime(Number(savedStart));
   }, []);
 
-  // Save to localStorage
+  // ✅ RUN TIMER
   useEffect(() => {
-    localStorage.setItem("timeData", JSON.stringify(times));
-  }, [times]);
+    if (!active || !startTime) return;
 
-  // Timer logic
-  useEffect(() => {
-    if (active) {
-      intervalRef.current = setInterval(() => {
-        setTimes((prev) => ({
-          ...prev,
-          [active]: prev[active] + 1,
-        }));
-      }, 1000);
-    }
+    intervalRef.current = setInterval(() => {
+      setTimes((prev) => ({ ...prev }));
+    }, 1000);
 
     return () => clearInterval(intervalRef.current);
-  }, [active]);
+  }, [active, startTime]);
+
+  const startTask = (task) => {
+    if (active) return;
+
+    const now = Date.now();
+
+    setActive(task);
+    setStartTime(now);
+
+    localStorage.setItem("activeTask", task);
+    localStorage.setItem("startTime", now);
+  };
+
+  const stopTask = () => {
+    if (!active) return;
+
+    const now = Date.now();
+    const elapsed = Math.floor((now - startTime) / 1000);
+
+    const updated = {
+      ...times,
+      [active]: times[active] + elapsed,
+    };
+
+    setTimes(updated);
+    setActive(null);
+    setStartTime(null);
+
+    localStorage.setItem("timeData", JSON.stringify(updated));
+    localStorage.removeItem("activeTask");
+    localStorage.removeItem("startTime");
+
+    clearInterval(intervalRef.current);
+  };
+
+  const getDisplayTime = (key) => {
+    if (key !== active || !startTime) return times[key];
+
+    const now = Date.now();
+    const elapsed = Math.floor((now - startTime) / 1000);
+    return times[key] + elapsed;
+  };
+
+  const resetAll = () => {
+    setTimes({
+      work: 0,
+      learning: 0,
+      personal: 0,
+      sleep: 0,
+    });
+
+    setActive(null);
+    setStartTime(null);
+
+    localStorage.removeItem("timeData");
+    localStorage.removeItem("activeTask");
+    localStorage.removeItem("startTime");
+
+    clearInterval(intervalRef.current);
+  };
 
   const totalSeconds =
-    times.work + times.learning + times.personal + times.sleep;
+    getDisplayTime("work") +
+    getDisplayTime("learning") +
+    getDisplayTime("personal") +
+    getDisplayTime("sleep");
 
   return (
     <div style={styles.container}>
@@ -66,16 +118,23 @@ export default function App() {
       {Object.keys(times).map((key) => (
         <div key={key} style={styles.card}>
           <h2>{key.toUpperCase()}</h2>
-          <p>{formatTime(times[key])}</p>
-          <button
-            onClick={() => setActive(key)}
-            style={{
-              ...styles.button,
-              backgroundColor: active === key ? "green" : "#444",
-            }}
-          >
-            {active === key ? "Running..." : "Start"}
-          </button>
+          <p>{formatTime(getDisplayTime(key))}</p>
+
+          {active === key ? (
+            <button
+              onClick={stopTask}
+              style={{ ...styles.button, backgroundColor: "green" }}
+            >
+              Running... (Stop)
+            </button>
+          ) : (
+            <button
+              onClick={() => startTask(key)}
+              style={{ ...styles.button, backgroundColor: "#444" }}
+            >
+              Start
+            </button>
+          )}
         </div>
       ))}
 
@@ -83,10 +142,7 @@ export default function App() {
 
       <button
         style={{ ...styles.button, backgroundColor: "red", marginTop: 20 }}
-        onClick={() => {
-          setTimes({ work: 0, learning: 0, personal: 0, sleep: 0 });
-          setActive(null);
-        }}
+        onClick={resetAll}
       >
         Reset Day
       </button>
