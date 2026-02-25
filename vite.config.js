@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+       injectRegister: 'auto',
       manifest: {
         name: 'Time Tracker',
         short_name: 'Tracker',
